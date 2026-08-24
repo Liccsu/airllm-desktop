@@ -221,6 +221,17 @@ fn emit_event(app: &AppHandle, event: &str, payload: serde_json::Value) {
 
 // ── 子进程工具 ──────────────────────────────────────────────────────────
 
+/// Windows 下隐藏子进程控制台：GUI 应用无控制台，spawn 默认会新建黑色 CMD 窗口。
+#[cfg(windows)]
+fn hide_console(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_console(_command: &mut Command) {}
+
 /// 同步运行命令，逐行回调输出，返回退出码。
 fn run_process<F>(
     program: &str,
@@ -234,6 +245,7 @@ where
 {
     let on_line = std::sync::Arc::new(on_line);
     let mut command = Command::new(program);
+    hide_console(&mut command);
     command.args(args);
     if let Some(dir) = cwd {
         command.current_dir(dir);
@@ -269,6 +281,7 @@ where
 /// ``<prefix>`` 事件，其余行与 stderr 转为 ``<prefix>-line`` 原始日志。
 fn run_engine_cli(app: &AppHandle, python: &Path, args: &[String], prefix: &str) -> std::io::Result<i32> {
     let mut command = Command::new(python);
+    hide_console(&mut command);
     command.args(args);
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn()?;
@@ -306,7 +319,9 @@ fn run_engine_cli(app: &AppHandle, python: &Path, args: &[String], prefix: &str)
 // ── 系统信息 ────────────────────────────────────────────────────────────
 
 fn detect_gpu() -> Option<GpuInfo> {
-    let output = Command::new("nvidia-smi")
+    let mut command = Command::new("nvidia-smi");
+    hide_console(&mut command);
+    let output = command
         .args(["--query-gpu=name,memory.total,memory.used", "--format=csv,noheader,nounits"])
         .output()
         .ok()?;
@@ -465,7 +480,9 @@ fn check_env_inner(state: &EngineState) -> EnvStatus {
     let Some(python) = state.python() else {
         return EnvStatus { python_ok: false, deps_ready: false };
     };
-    let ok = Command::new(python)
+    let mut command = Command::new(python);
+    hide_console(&mut command);
+    let ok = command
         .args(["-c", "import torch, fastapi, transformers, airllm, airllm_responses"])
         .output()
         .map(|o| o.status.success())
@@ -796,6 +813,7 @@ pub async fn start_service(
     let api_key = load_or_create_api_key(&state);
 
     let mut command = Command::new(&python);
+    hide_console(&mut command);
     command
         .args(["-m", "airllm_responses.cli", "serve", "--config"])
         .arg(&config_path)

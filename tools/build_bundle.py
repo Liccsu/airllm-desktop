@@ -139,4 +139,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import sys
+
+    # Windows CI 默认编码可能不含中文；统一使用 UTF-8 输出，避免打印崩溃。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
     raise SystemExit(main())

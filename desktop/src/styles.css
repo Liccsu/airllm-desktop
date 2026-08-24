@@ -166,6 +166,7 @@ button {
 
 input[type="text"],
 input[type="number"],
+input[type="password"],
 select,
 textarea {
   background: var(--surface-2);

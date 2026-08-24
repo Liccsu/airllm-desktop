@@ -56,8 +56,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJEQzREMjQ0NUU1QjNENApSV1RVcytWRkpFM2NDKzI4WFpCbWlSNFJmWWNKbEVOVjQvUW45c09Db2E2RDhUOE9xenhqK1RQUwo=",
       "endpoints": [
-        "https://gh-proxy.org/https://github.com/Liccsu/airllm-free-token/releases/latest/download/latest.json",
-        "https://github.com/Liccsu/airllm-free-token/releases/latest/download/latest.json"
+        "https://gh-proxy.org/https://github.com/Liccsu/airllm-desktop/releases/latest/download/latest.json",
+        "https://github.com/Liccsu/airllm-desktop/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

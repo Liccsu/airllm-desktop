@@ -14,10 +14,10 @@
 
 ## 从零部署（用户视角）
 
-1. 到 [GitHub Releases](https://github.com/Liccsu/airllm-free-token/releases/latest)
+1. 到 [GitHub Releases](https://github.com/Liccsu/airllm-desktop/releases/latest)
    下载最新的 `AirLLM_<版本>_x64-setup.exe`，运行完成安装。
    国内网络可改用加速地址下载（gh-proxy 代理，与官方文件一致）：
-   `https://gh-proxy.org/https://github.com/Liccsu/airllm-free-token/releases/latest/download/AirLLM_<版本>_x64-setup.exe`
+   `https://gh-proxy.org/https://github.com/Liccsu/airllm-desktop/releases/latest/download/AirLLM_<版本>_x64-setup.exe`
 2. 首次启动进入欢迎引导：
    - 检查显卡（NVIDIA GPU 与显存）；
    - 一键安装运行环境（Python 3.11、PyTorch CUDA 版、引擎依赖，全程进度展示，无命令行）；
@@ -84,9 +84,9 @@ API key 见设置页，或数据目录 `api_key.txt`。模型清单兼容旧 man
 ```powershell
 # 1. 获取仓库（本仓库不含 airllm 上游；构建脚本会在缺失时自动拉取）
 # 国内加速（gh-proxy）：
-git clone https://gh-proxy.org/https://github.com/Liccsu/airllm-free-token.git
-# 官方地址：git clone https://github.com/Liccsu/airllm-free-token.git
-cd airllm-free-token
+git clone https://gh-proxy.org/https://github.com/Liccsu/airllm-desktop.git
+# 官方地址：git clone https://github.com/Liccsu/airllm-desktop.git
+cd airllm-desktop
 
 # 2. 生成捆绑资源（engine/airllm wheel + uv.exe + catalog.json）
 python tools/build_bundle.py

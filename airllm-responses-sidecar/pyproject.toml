@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airllm-responses-sidecar"
+version = "0.2.0"
+description = "AirLLM 本地引擎：OpenAI Responses API 服务、模型安装与运行时管理"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
+    "pydantic>=2,<3",
+    "torch>=2.4",
+    "transformers>=4.49,<5.13",
+    "accelerate>=1.0",
+    "safetensors",
+    "huggingface-hub",
+    "scipy",
+    "sentencepiece",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+test = ["httpx"]
+
+[project.scripts]
+airllm-engine = "airllm_responses.cli:main"
+
+[tool.setuptools]
+package-data = { airllm_responses = ["catalog.json"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.unittest]
+start-directory = "tests"

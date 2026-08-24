@@ -1,0 +1,24 @@
+# 构建产物
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/node_modules/
+
+# 运行时捆绑产物（构建时由 tools/build_bundle.py 生成；catalog.json 是源码，需提交）
+desktop/src-tauri/resources/*.whl
+desktop/src-tauri/resources/uv.exe
+
+# Python
+airllm-responses-sidecar/.venv*/
+airllm-responses-sidecar/build/
+airllm-responses-sidecar/*.egg-info/
+__pycache__/
+*.pyc
+
+# 外部依赖与本地数据
+airllm/                  # 上游 AirLLM 源码（构建脚本自动拉取）
+x/                       # 本地运行时数据
+
+# 本地环境
+.DS_Store
+Thumbs.db

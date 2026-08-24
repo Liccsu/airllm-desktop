@@ -1,0 +1,27 @@
+# 引擎配置示例（无 secret）；真实文件为数据目录下的 app.toml。
+# 桌面应用会写入 <数据目录>/app.toml，并为每个安装的模型生成清单。
+# API key 不写入本文件：由 <数据目录>/api_key.txt 或环境变量 AIRLLM_API_KEY 提供。
+
+[server]
+host = "127.0.0.1"
+port = 8000
+max_concurrent_requests = 1
+preload = true          # 启动服务时立即加载模型；离线聊天界面启动更快
+# api_key_file = "${DATA_DIR}/api_key.txt"
+
+[model]
+name = "airllm-local"   # 服务与 API 中显示的模型别名
+id = "Qwen/Qwen2.5-0.5B-Instruct"
+# endpoint = "https://hf-mirror.com"   # 模型下载源；留空使用 huggingface.co 官方源
+# root = "${DATA_DIR}/models"        # 模型下载根目录；可指向其他磁盘
+# revision = "..."      # 留空 = 下载时的默认分支并固定实际 commit
+# 以下路径留空时引擎按数据目录布局自动定位：
+# dir = "${DATA_DIR}/models/airllm-local"
+# shard_dir = "${DATA_DIR}/shards/airllm-local"
+# manifest = "${DATA_DIR}/manifests/airllm-local.json"
+
+[engine]
+device = "cuda:0"
+max_seq_len = 512
+max_output_tokens = 128
+download_workers = 8        # 模型下载并行线程数

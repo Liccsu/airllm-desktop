@@ -1,0 +1,59 @@
+{
+  "updated": "2026-08-24",
+  "models": [
+    {
+      "id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "name": "Qwen2.5 0.5B Instruct",
+      "description": "轻量快速的中文日常模型，入门首选",
+      "size_bytes": 1073741826,
+      "vram_gb": 2,
+      "license": "Apache-2.0",
+      "recommended": true
+    },
+    {
+      "id": "Qwen/Qwen2.5-1.5B-Instruct",
+      "name": "Qwen2.5 1.5B Instruct",
+      "description": "平衡速度与质量的通用模型",
+      "size_bytes": 3221225472,
+      "vram_gb": 4,
+      "license": "Apache-2.0",
+      "recommended": false
+    },
+    {
+      "id": "Qwen/Qwen2.5-3B-Instruct",
+      "name": "Qwen2.5 3B Instruct",
+      "description": "指令跟随更稳定的中大杯选择",
+      "size_bytes": 6442450944,
+      "vram_gb": 8,
+      "license": "Apache-2.0",
+      "recommended": false
+    },
+    {
+      "id": "Qwen/Qwen3-1.7B",
+      "name": "Qwen3 1.7B",
+      "description": "新一代架构，推理与创作俱佳",
+      "size_bytes": 3758096384,
+      "vram_gb": 5,
+      "license": "Apache-2.0",
+      "recommended": false
+    },
+    {
+      "id": "Qwen/Qwen2.5-7B-Instruct",
+      "name": "Qwen2.5 7B Instruct",
+      "description": "真正的 7B 级智能，适合用于编程助手",
+      "size_bytes": 15786601676,
+      "vram_gb": 12,
+      "license": "Apache-2.0",
+      "recommended": false
+    },
+    {
+      "id": "Qwen/Qwen3-8B",
+      "name": "Qwen3 8B",
+      "description": "8B 级强模型，需要约 16GB 显存",
+      "size_bytes": 17458853888,
+      "vram_gb": 14,
+      "license": "Apache-2.0",
+      "recommended": false
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+/* AirLLM Desktop 全局样式：深色控制台，品牌色来自项目视觉体系。 */
+
+:root {
+  color-scheme: dark;
+  --bg: #14171c;
+  --surface: #1b1f27;
+  --surface-2: #232830;
+  --surface-3: #2e343e;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-2: #2c323c;
+  --text: #dde2e9;
+  --text-2: #a8b0bd;
+  --text-3: #7c8492;
+  --text-4: #5b6371;
+  --accent: #58a6f0;
+  --accent-soft: rgba(88, 166, 240, 0.14);
+  --success: #3cb98f;
+  --warn: #e5c07b;
+  --danger: #e06c75;
+  --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", "Noto Sans SC", monospace;
+  --sans: "Rubik", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei",
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+button {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4250;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── 通用组件样式 ── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.btn:hover {
+  filter: brightness(1.12);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+.btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #14171c;
+  box-shadow: 0 2px 10px rgba(88, 166, 240, 0.26), 0 8px 28px rgba(88, 166, 240, 0.16);
+}
+.btn.primary:hover {
+  background: #6cb1f3;
+}
+.btn.ghost {
+  background: transparent;
+}
+.btn.small {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+.dot.ok {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(60, 185, 143, 0.6);
+}
+.dot.warn {
+  background: var(--warn);
+}
+.dot.bad {
+  background: var(--danger);
+}
+.dot.idle {
+  background: var(--text-4);
+}
+
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #7cc4ff);
+  transition: width 0.2s ease;
+}
+
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  padding: 9px 12px;
+  outline: none;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+}
+
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.section-title {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 12px;
+}
+
+.empty {
+  color: var(--text-3);
+  text-align: center;
+  padding: 48px 0;
+  font-size: 13.5px;
+}

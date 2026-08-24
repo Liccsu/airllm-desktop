@@ -31,7 +31,10 @@ jobs:
       - name: Setup Python & uv
         uses: astral-sh/setup-uv@v3
         with:
-          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install Python 3.11 (engine build target)
+        run: uv python install 3.11
 
       - name: Build bundle resources (engine/airllm wheels + uv.exe + catalog)
         run: python tools/build_bundle.py

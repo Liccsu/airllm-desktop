@@ -28,18 +28,24 @@ onMounted(async () => {
       store.envInstall.lines.push(payload.text);
       if (store.envInstall.lines.length > 500) store.envInstall.lines.shift();
     }),
-    await on<{ file: string; doneBytes: number; totalBytes: number; stage: string }>(
-      "model-progress",
-      (payload) => {
-        if (payload.stage === "started") {
-          store.download.stage = payload.stage;
-          store.download.file = payload.file;
-        }
-        store.download.doneBytes = payload.doneBytes;
-        store.download.totalBytes = payload.totalBytes;
-        if (payload.stage === "done") store.download.file = "";
-      },
-    ),
+    await on<Record<string, unknown>>("model-progress", (payload) => {
+      // 引擎事件字段为 snake_case(done_bytes/total_bytes)；兼容 camelCase。
+      const stage = String(payload.stage ?? "");
+      const file = String(payload.file ?? "");
+      const doneBytes = Number(
+        payload.done_bytes ?? payload.doneBytes ?? 0,
+      );
+      const totalBytes = Number(
+        payload.total_bytes ?? payload.totalBytes ?? 0,
+      );
+      if (stage === "started") {
+        store.download.stage = stage;
+        store.download.file = file;
+      }
+      store.download.doneBytes = doneBytes;
+      store.download.totalBytes = totalBytes;
+      if (stage === "done") store.download.file = "";
+    }),
         await on<{ text: string }>("model-progress-line", (payload) => {
       store.serviceLogs.push({
         ts: new Date().toLocaleTimeString(),

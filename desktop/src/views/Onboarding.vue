@@ -130,6 +130,13 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((store.download.doneBytes / total) * 100));
 });
 
+const progressText = computed(() => {
+  const total = store.download.totalBytes;
+  if (!total) return `${(store.download.doneBytes / 1e9).toFixed(1)}GB 下载中...`;
+  const pct = progressPercent.value ?? 0;
+  return `${(store.download.doneBytes / 1e9).toFixed(1)}GB / ${(total / 1e9).toFixed(1)}GB  ${pct}%`;
+});
+
 async function finish() {
   emit("finished");
 }
@@ -280,7 +287,7 @@ async function finish() {
         <div v-if="downloading" class="download-card card">
           <div class="dl-row">
             <span class="mono dl-file">{{ store.download.file || "准备中..." }}</span>
-            <span class="dl-pct">{{ progressPercent === null ? "..." : progressPercent + "%" }}</span>
+            <span class="dl-pct mono">{{ progressText }}</span>
           </div>
           <div class="progress-track">
             <div class="progress-fill" :style="{ width: (progressPercent ?? 10) + '%' }"></div>

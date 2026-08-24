@@ -15,6 +15,20 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((store.download.doneBytes / total) * 100));
 });
 
+function fmtSize(bytes: number): string {
+  if (!bytes) return "0.0GB";
+  return `${(bytes / 1e9).toFixed(1)}GB`;
+}
+
+// 形如 "0.5GB / 1.1GB  45%"；总大小未知时显示已下载量。
+const progressText = computed(() => {
+  if (store.download.activeId !== downloadingId.value) return "";
+  const total = store.download.totalBytes;
+  if (!total) return `${fmtSize(store.download.doneBytes)} 下载中...`;
+  const pct = progressPercent.value ?? 0;
+  return `${fmtSize(store.download.doneBytes)} / ${fmtSize(total)}  ${pct}%`;
+});
+
 const installedByModelId = computed(() => {
   const map = new Map<string, string>();
   for (const mod of store.snapshot?.installed ?? []) map.set(mod.modelId, mod.alias);
@@ -120,7 +134,7 @@ async function importLocal() {
     <div v-if="store.download.activeId" class="download-card card">
       <div class="dl-row">
         <span class="mono dl-file">{{ store.download.file || "准备下载..." }}</span>
-        <span>{{ progressPercent === null ? "..." : progressPercent + "%" }}</span>
+        <span class="dl-pct mono">{{ progressText }}</span>
       </div>
       <div class="progress-track">
         <div class="progress-fill" :style="{ width: (progressPercent ?? 10) + '%' }"></div>

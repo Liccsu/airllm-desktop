@@ -154,6 +154,12 @@ def _download_with_progress(
             max_workers=workers,
         )
     except Exception as exc:
+        # 受限仓库：需要有效的 HF Access Token，并先在 HF 官网申请访问权限。
+        if type(exc).__name__ == "GatedRepoError" or "gated repo" in str(exc).lower():
+            raise DownloadError(
+                "该模型是 Hugging Face 受限仓库（gated）：请在 HF 官网申请访问权限，"
+                "然后在设置页填写 Hugging Face Access Token 后重试"
+            ) from exc
         raise DownloadError(f"模型下载失败: {type(exc).__name__}") from exc
 
 
@@ -199,7 +205,25 @@ def download_catalog_model(
         # 须在首次 import huggingface_hub 之前设置:该常量在模块加载时固化。
         os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     emit("download.started", model_id=model_id, revision=resolved_revision, endpoint=endpoint)
-    notify = progress or (lambda _file, _done, _total, _stage: None)
+
+    # 进度事件发送累计已下载字节(跨文件)与整体大小；文件列表不可用时整体大小未知。
+    _completed: dict[str, int] = {"bytes": 0}
+
+    def on_progress(file: str, done: int, total: int, stage: str) -> None:
+        if stage == "done":
+            _completed["bytes"] += total or done or 0
+        current = done if stage == "progress" else 0
+        emit(
+            "download.progress",
+            file=file,
+            done_bytes=_completed["bytes"] + current,
+            total_bytes=total_bytes,
+            stage=stage,
+        )
+        if progress is not None:
+            progress(file, done, total, stage)
+
+    notify = on_progress
 
     if alias is None:
         alias = model_id.replace("/", "-")
@@ -219,6 +243,9 @@ def download_catalog_model(
     emit("download.files", model_id=model_id, files_count=len(files) if files else 0, total_bytes=total_bytes)
 
     final_dir.parent.mkdir(parents=True, exist_ok=True)
+    # 清理该别名先前失败/取消留下的 staging 残留。
+    for stale in final_dir.parent.glob(f".{final_dir.name}.staging-*"):
+        shutil.rmtree(stale, ignore_errors=True)
     staging = final_dir.parent / f".{final_dir.name}.staging-{uuid.uuid4().hex}"
     try:
         staging.mkdir(parents=False)

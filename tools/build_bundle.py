@@ -50,11 +50,15 @@ def ensure_airllm_source() -> None:
             "请清理后重试或手动放置上游源码"
         )
     AIRLLM_SRC.parent.mkdir(parents=True, exist_ok=True)
-    for clone_url in (
-        # 国内加速（gh-proxy）；失败回退官方地址
-        "https://gh-proxy.org/https://github.com/lyogavin/airllm.git",
-        "https://github.com/lyogavin/airllm.git",
-    ):
+    # CI（GitHub 运行器）网络直连官方源最快；本地开发优先 gh-proxy 国内加速。
+    ghproxy_url = "https://gh-proxy.org/https://github.com/lyogavin/airllm.git"
+    official_url = "https://github.com/lyogavin/airllm.git"
+    candidates = (
+        (official_url, ghproxy_url)
+        if os.environ.get("CI") == "true"
+        else (ghproxy_url, official_url)
+    )
+    for clone_url in candidates:
         try:
             run(
                 ["git", "clone", "--depth", "1", clone_url, str(AIRLLM_SRC.parent)],

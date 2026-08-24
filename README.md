@@ -16,6 +16,8 @@
 
 1. 到 [GitHub Releases](https://github.com/Liccsu/airllm-free-token/releases/latest)
    下载最新的 `AirLLM_<版本>_x64-setup.exe`，运行完成安装。
+   国内网络可改用加速地址下载（gh-proxy 代理，与官方文件一致）：
+   `https://gh-proxy.org/https://github.com/Liccsu/airllm-free-token/releases/latest/download/AirLLM_<版本>_x64-setup.exe`
 2. 首次启动进入欢迎引导：
    - 检查显卡（NVIDIA GPU 与显存）；
    - 一键安装运行环境（Python 3.11、PyTorch CUDA 版、引擎依赖，全程进度展示，无命令行）；
@@ -45,14 +47,21 @@ PyTorch CUDA 版默认从官方索引 `https://download.pytorch.org/whl/cu128` �
 网络受限环境可在启动应用前设置环境变量切换镜像源：
 
 ```powershell
+# PyTorch CUDA 版索引（国内一般无需切换；如遇网络问题可换镜像）
 $env:AIRLLM_TORCH_INDEX_URL = "<镜像的 cu128 索引地址>"
+# Python 运行时下载镜像（可选；uv 官方默认从 GitHub 下载 python-build-standalone）
+$env:UV_PYTHON_INSTALL_MIRROR = "<python-build-standalone 镜像地址>"
 ```
+
+引擎其余 Python 依赖默认从**中科大 PyPI 镜像**（https://mirrors.ustc.edu.cn/pypi/web/simple/）安装；
+airllm 上游源码克隆默认走 gh-proxy 加速（失败自动回退官方源）。
 
 ## 升级
 
 - **引擎/airllm 升级**：重新安装最新版安装包后，应用启动时会自动检测并后台升级引擎与推理库
   （仅替换 Python wheel，不重下 Python/PyTorch；失败会在下次启动重试）。
-- **桌面应用升级**：设置页可检查更新；更新发布后，应用会自动下载新版安装包并提示安装。
+- **桌面应用升级**：设置页可检查更新（更新清单先经 gh-proxy 加速获取，失败自动回退官方）；
+  更新发布后，应用会自动下载新版安装包并提示安装。
 - 升级不会影响模型、分片与对话数据（均位于用户数据目录 `%LOCALAPPDATA%\AirLLM`）。
 
 ## 引擎使用（可选，通常无需手工操作）
@@ -74,7 +83,9 @@ API key 见设置页，或数据目录 `api_key.txt`。模型清单兼容旧 man
 
 ```powershell
 # 1. 获取仓库（本仓库不含 airllm 上游；构建脚本会在缺失时自动拉取）
-git clone https://github.com/Liccsu/airllm-free-token.git
+# 国内加速（gh-proxy）：
+git clone https://gh-proxy.org/https://github.com/Liccsu/airllm-free-token.git
+# 官方地址：git clone https://github.com/Liccsu/airllm-free-token.git
 cd airllm-free-token
 
 # 2. 生成捆绑资源（engine/airllm wheel + uv.exe + catalog.json）

@@ -50,10 +50,22 @@ def ensure_airllm_source() -> None:
             "请清理后重试或手动放置上游源码"
         )
     AIRLLM_SRC.parent.mkdir(parents=True, exist_ok=True)
-    run(
-        ["git", "clone", "--depth", "1", "https://github.com/lyogavin/airllm.git", str(AIRLLM_SRC.parent)],
-        cwd=REPO_ROOT,
-    )
+    for clone_url in (
+        # 国内加速（gh-proxy）；失败回退官方地址
+        "https://gh-proxy.org/https://github.com/lyogavin/airllm.git",
+        "https://github.com/lyogavin/airllm.git",
+    ):
+        try:
+            run(
+                ["git", "clone", "--depth", "1", clone_url, str(AIRLLM_SRC.parent)],
+                cwd=REPO_ROOT,
+            )
+            return
+        except subprocess.CalledProcessError:
+            import shutil
+
+            shutil.rmtree(AIRLLM_SRC.parent, ignore_errors=True)
+    raise RuntimeError(f"AirLLM 源码克隆失败（已尝试 gh-proxy 与官方源）: {AIRLLM_SRC.parent}")
 
 
 def build_airllm_wheel(out_dir: Path) -> Path:

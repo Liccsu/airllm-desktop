@@ -12,6 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 const PYTHON_VERSION: &str = "3.11";
 const TORCH_INDEX_URL: &str = "https://download.pytorch.org/whl/cu128";
+const PYPI_MIRROR_URL: &str = "https://mirrors.ustc.edu.cn/pypi/web/simple/";
 const BASE_DEPENDENCIES: &[&str] = &[
     "fastapi>=0.115,<1",
     "uvicorn>=0.34,<1",
@@ -526,6 +527,8 @@ fn install_env_inner(
     venv_python: PathBuf,
 ) -> Result<bool, String> {
     // 1. 复制 uv 到数据目录（安装目录可能只读）
+    // Python 运行时下载（uv）：默认官方源；国内网络可在启动应用前设置
+    // UV_PYTHON_INSTALL_MIRROR 指向可用的 python-build-standalone 镜像。
     let bin_dir = data_dir.join("bin");
     std::fs::create_dir_all(&bin_dir).map_err(|e| e.to_string())?;
     if !uv_exe.is_file() {
@@ -561,6 +564,8 @@ fn install_env_inner(
     let python = venv_python.to_string_lossy().into_owned();
     let mut args = vec!["pip".to_string(), "install".to_string(), "--python".to_string(), python.clone()];
     args.extend(BASE_DEPENDENCIES.iter().map(|dep| (*dep).to_string()));
+    args.push("--index-url".to_string());
+    args.push(PYPI_MIRROR_URL.to_string());
     let app_line = app.clone();
     let code = run_process(uv_exe.to_str().unwrap(), &args, None, &[], move |line| {
         emit_event(&app_line, "env-line", serde_json::json!({ "text": line }));

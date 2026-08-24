@@ -861,7 +861,7 @@ pub async fn stop_service(state: State<'_, EngineState>) -> Result<(), String> {
     Ok(())
 }
 
-fn stop_service_inner(state: &EngineState) {
+pub fn stop_service_inner(state: &EngineState) {
     let mut guard = state.service.lock();
     if let Some(mut record) = guard.take() {
         let _ = record.child.kill();

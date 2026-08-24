@@ -44,8 +44,14 @@ export function defaultSettings(): ServiceSettings {
 
 export async function refreshState(): Promise<AppSnapshot> {
   store.snapshot = await api.getState();
-  if (store.snapshot && !store.lastModelAlias && store.snapshot.installed.length > 0) {
-    store.lastModelAlias = store.snapshot.installed[0].alias;
+  if (store.snapshot) {
+    // 仅首次回填 Rust 持久化的用户设置：后续轮询不覆盖，避免清空用户正在输入的内容。
+    if (store.settings === null) {
+      store.settings = store.snapshot.settings;
+    }
+    if (!store.lastModelAlias && store.snapshot.installed.length > 0) {
+      store.lastModelAlias = store.snapshot.installed[0].alias;
+    }
   }
   return store.snapshot;
 }
@@ -65,8 +71,11 @@ export async function bootstrap(): Promise<void> {
       if (saved !== null) {
         store.sourceEndpoint = saved;
         if (saved) {
-          store.settings = { ...defaultSettings(), endpoint: saved };
-          api.updateSettings({ ...defaultSettings(), endpoint: saved }).catch(() => undefined);
+          // 只更新 endpoint 字段，保留已从 Rust 恢复的其余设置（模型目录、线程数等），
+          // 否则用默认值重建会清空用户已保存的配置。
+          const base = store.settings ?? defaultSettings();
+          store.settings = { ...base, endpoint: saved };
+          api.updateSettings({ ...base, endpoint: saved }).catch(() => undefined);
         }
       }
     } catch {

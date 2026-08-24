@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { api } from "../api";
@@ -23,18 +23,8 @@ const keyCopied = ref(false);
 const appVersion = ref("");
 const updateState = ref("");
 const hfToken = ref(store.hfToken);
-const hfTokenSaved = ref(false);
 
-function saveHfToken() {
-  store.hfToken = hfToken.value.trim();
-  try {
-    localStorage.setItem("airllm.hfToken", store.hfToken);
-  } catch {
-    // localStorage 不可用时仅会话内生效
-  }
-  hfTokenSaved.value = true;
-  setTimeout(() => (hfTokenSaved.value = false), 2000);
-}
+
 
 async function checkUpdate() {
   updateState.value = "正在检查更新...";
@@ -70,9 +60,27 @@ function syncForm() {
   form.downloadWorkers = s.downloadWorkers ?? 8;
 }
 void syncForm();
+// 设置由 bootstrap 异步从 Rust 恢复；仅首次就绪时同步表单（后续不再覆盖，避免清空输入）。
+let syncedOnce = false;
+watch(
+  () => store.settings,
+  (s) => {
+    if (s && !syncedOnce) {
+      syncedOnce = true;
+      syncForm();
+    }
+  },
+);
 
 async function save() {
   error.value = "";
+  // Token 随设置一并保存（仅存本机 localStorage，不落盘到配置文件）。
+  store.hfToken = hfToken.value.trim();
+  try {
+    localStorage.setItem("airllm.hfToken", store.hfToken);
+  } catch {
+    // localStorage 不可用时仅会话内生效
+  }
   if (form.port < 1 || form.port > 65535) {
     error.value = "端口必须在 1-65535 之间";
     return;
@@ -184,9 +192,7 @@ async function open(target: string) {
       </div>
       <div class="save-row">
         <button class="btn primary small" @click="save">保存设置</button>
-        <button class="btn small ghost" @click="saveHfToken">保存 Token</button>
         <span v-if="saved" class="saved-hint">✓ 已保存</span>
-        <span v-if="hfTokenSaved" class="saved-hint">✓ Token 已保存</span>
         <span v-if="error" class="error-hint">{{ error }}</span>
       </div>
     </div>

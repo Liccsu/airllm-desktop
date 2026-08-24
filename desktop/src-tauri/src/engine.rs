@@ -93,6 +93,7 @@ pub struct AppSnapshot {
     pub gpu: Option<GpuInfo>,
     pub memory: MemoryInfo,
     pub api_key: String,
+    pub settings: ServiceSettings,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -185,6 +186,10 @@ impl EngineState {
 
     fn catalog_path(&self) -> PathBuf {
         self.resources.join("catalog.json")
+    }
+
+    fn settings_path(&self) -> PathBuf {
+        self.data_dir.join("settings.json")
     }
 
     /// 捆绑引擎 wheel 的指纹；用于检测安装包中的引擎是否比已装版本更新。
@@ -369,6 +374,7 @@ pub async fn get_state(state: State<'_, EngineState>) -> Result<AppSnapshot, Str
         gpu,
         memory,
         api_key,
+        settings: state.settings.lock().clone(),
     })
 }
 
@@ -966,7 +972,27 @@ pub async fn update_settings(state: State<'_, EngineState>, settings: ServiceSet
         let mut guard = state.settings.lock();
         *guard = settings;
     }
-    Ok(())
+    persist_settings(&state)
+}
+
+/// 从数据目录加载持久化的用户设置；不存在或损坏时返回默认值。
+fn load_persisted_settings(state: &EngineState) -> ServiceSettings {
+    let path = state.settings_path();
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        if let Ok(settings) = serde_json::from_str::<ServiceSettings>(&text) {
+            return settings;
+        }
+    }
+    ServiceSettings::default()
+}
+
+/// 将用户设置写入数据目录（重启后保留；区别于仅服务运行时使用的 app.toml）。
+fn persist_settings(state: &EngineState) -> Result<(), String> {
+    let path = state.settings_path();
+    let settings = state.settings.lock().clone();
+    std::fs::create_dir_all(&state.data_dir).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())
 }
 
 fn write_app_toml(state: &EngineState, alias: &str, settings: &ServiceSettings) -> Result<PathBuf, String> {
@@ -1060,6 +1086,11 @@ pub async fn open_path(app: AppHandle, state: State<'_, EngineState>, target: St
 pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let state = EngineState::new(app);
     std::fs::create_dir_all(&state.data_dir)?;
+    // 恢复上次保存的用户设置（端口、镜像源、模型目录、线程数等）。
+    {
+        let persisted = load_persisted_settings(&state);
+        *state.settings.lock() = persisted;
+    }
     app.manage(state);
     maybe_auto_update_engine(app.clone());
     Ok(())

@@ -64,6 +64,7 @@ export interface AppSnapshot {
   gpu: GpuInfo | null;
   memory: MemoryInfo;
   apiKey: string;
+  settings: ServiceSettings;
 }
 
 export const api = {

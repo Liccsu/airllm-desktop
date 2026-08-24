@@ -34,8 +34,20 @@ async function download(id: string, alias?: string) {
   store.download.doneBytes = 0;
   store.download.totalBytes = 0;
   try {
-    await api.downloadModel(id, alias);
+    await api.downloadModel(id, alias, store.hfToken || undefined);
     await refresh();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    downloadingId.value = "";
+    store.download.activeId = "";
+  }
+}
+
+async function cancelDownload() {
+  error.value = "";
+  try {
+    await api.cancelDownload();
   } catch (e) {
     error.value = String(e);
   } finally {
@@ -112,6 +124,9 @@ async function importLocal() {
       </div>
       <div class="progress-track">
         <div class="progress-fill" :style="{ width: (progressPercent ?? 10) + '%' }"></div>
+      </div>
+      <div class="dl-actions">
+        <button class="btn small ghost" @click="cancelDownload">取消下载</button>
       </div>
     </div>
 
@@ -210,6 +225,11 @@ async function importLocal() {
   margin-bottom: 8px;
   font-size: 12.5px;
   color: var(--text-2);
+}
+.dl-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
 }
 .dl-file {
   overflow: hidden;

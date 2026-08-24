@@ -9,6 +9,7 @@ export const store = reactive({
   error: "",
   settings: null as ServiceSettings | null,
   sourceEndpoint: "",
+  hfToken: "",
   view: "chat" as "chat" | "library" | "settings" | "logs",
   serviceBusy: false,
   lastModelAlias: "",
@@ -55,6 +56,11 @@ export async function bootstrap(): Promise<void> {
     await refreshState();
     // 恢复上次选择的模型源（官方源留空即默认）。
     try {
+      try {
+        store.hfToken = localStorage.getItem("airllm.hfToken") ?? "";
+      } catch {
+        store.hfToken = "";
+      }
       const saved = localStorage.getItem("airllm.endpoint");
       if (saved !== null) {
         store.sourceEndpoint = saved;

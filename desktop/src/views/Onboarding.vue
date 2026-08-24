@@ -86,8 +86,19 @@ async function startDownload(id: string, alias?: string) {
   store.download.doneBytes = 0;
   store.download.totalBytes = 0;
   try {
-    await api.downloadModel(id, alias);
+    await api.downloadModel(id, alias, store.hfToken || undefined);
     await refresh();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    store.download.activeId = "";
+  }
+}
+
+async function cancelDownload() {
+  error.value = "";
+  try {
+    await api.cancelDownload();
   } catch (e) {
     error.value = String(e);
   } finally {
@@ -273,6 +284,9 @@ async function finish() {
           </div>
           <div class="progress-track">
             <div class="progress-fill" :style="{ width: (progressPercent ?? 10) + '%' }"></div>
+          </div>
+          <div class="dl-actions">
+            <button class="btn small ghost" @click="cancelDownload">取消下载</button>
           </div>
         </div>
         <div v-if="error" class="error">{{ error }}</div>
@@ -563,6 +577,11 @@ h1 {
   padding: 14px 16px;
   max-width: 560px;
   margin-bottom: 20px;
+}
+.dl-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
 }
 .dl-row {
   display: flex;

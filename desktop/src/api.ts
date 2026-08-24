@@ -69,8 +69,9 @@ export interface AppSnapshot {
 export const api = {
   getState: () => invoke<AppSnapshot>("get_state"),
   installEnv: () => invoke<boolean>("install_env"),
-  downloadModel: (modelId: string, alias?: string) =>
-    invoke<void>("download_model", { modelId, alias: alias ?? null }),
+  downloadModel: (modelId: string, alias?: string, hfToken?: string) =>
+    invoke<void>("download_model", { modelId, alias: alias ?? null, hfToken: hfToken ?? null }),
+  cancelDownload: () => invoke<void>("cancel_download"),
   removeModel: (alias: string) => invoke<void>("remove_model", { alias }),
   importModel: (dir: string, alias: string) => invoke<void>("import_model", { dir, alias }),
   startService: (alias: string, settings: ServiceSettings) =>

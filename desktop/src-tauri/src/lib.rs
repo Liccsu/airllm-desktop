@@ -26,6 +26,7 @@ pub fn run() {
             engine::get_state,
             engine::install_env,
             engine::download_model,
+            engine::cancel_download,
             engine::remove_model,
             engine::import_model,
             engine::start_service,

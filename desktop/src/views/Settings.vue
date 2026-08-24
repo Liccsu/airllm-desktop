@@ -22,6 +22,19 @@ const envLines = ref<string[]>([]);
 const keyCopied = ref(false);
 const appVersion = ref("");
 const updateState = ref("");
+const hfToken = ref(store.hfToken);
+const hfTokenSaved = ref(false);
+
+function saveHfToken() {
+  store.hfToken = hfToken.value.trim();
+  try {
+    localStorage.setItem("airllm.hfToken", store.hfToken);
+  } catch {
+    // localStorage 不可用时仅会话内生效
+  }
+  hfTokenSaved.value = true;
+  setTimeout(() => (hfTokenSaved.value = false), 2000);
+}
 
 async function checkUpdate() {
   updateState.value = "正在检查更新...";
@@ -160,6 +173,10 @@ async function open(target: string) {
           下载线程数（并行）
           <input type="number" v-model.number="form.downloadWorkers" min="1" max="32" />
         </label>
+        <label class="field">
+          Hugging Face Access Token（下载私有/受限模型时需要）
+          <input type="password" v-model="hfToken" placeholder="hf_...（留空表示公开模型无需登录）" />
+        </label>
         <label class="field check">
           <input type="checkbox" v-model="form.preload" />
           启动时预加载模型
@@ -167,7 +184,9 @@ async function open(target: string) {
       </div>
       <div class="save-row">
         <button class="btn primary small" @click="save">保存设置</button>
+        <button class="btn small ghost" @click="saveHfToken">保存 Token</button>
         <span v-if="saved" class="saved-hint">✓ 已保存</span>
+        <span v-if="hfTokenSaved" class="saved-hint">✓ Token 已保存</span>
         <span v-if="error" class="error-hint">{{ error }}</span>
       </div>
     </div>

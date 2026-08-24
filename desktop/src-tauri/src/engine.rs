@@ -131,6 +131,7 @@ pub struct EngineState {
     pub uv_exe: PathBuf,
     env_checked: Mutex<Option<EnvStatus>>,
     service: Mutex<Option<ServiceRecord>>,
+    downloading: Mutex<Option<Child>>,
     installing: Mutex<bool>,
     settings: Mutex<ServiceSettings>,
 }
@@ -159,6 +160,7 @@ impl EngineState {
             uv_exe,
             env_checked: Mutex::new(None),
             service: Mutex::new(None),
+            downloading: Mutex::new(None),
             installing: Mutex::new(false),
             settings: Mutex::new(ServiceSettings::default()),
         }
@@ -669,9 +671,17 @@ pub async fn download_model(
     state: State<'_, EngineState>,
     model_id: String,
     alias: Option<String>,
+    hf_token: Option<String>,
 ) -> Result<(), String> {
     if !deps_ready_now(&state) {
         return Err("引擎环境未就绪，请先安装环境".into());
+    }
+    {
+        let mut downloading = state.downloading.lock();
+        if downloading.is_some() {
+            return Err("已有模型下载进行中，请先取消或等待完成".into());
+        }
+        *downloading = None;
     }
     let python = state.python().ok_or_else(|| "引擎环境未就绪".to_string())?;
     let mut args = vec![
@@ -703,20 +713,96 @@ pub async fn download_model(
             args.push(settings.download_workers.to_string());
         }
     }
-    let app_clone = app.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        run_engine_cli(&app_clone, &python, &args, "model-progress")
+
+    let mut command = Command::new(&python);
+    hide_console(&mut command);
+    command.args(&args);
+    // HF Access Token 仅通过环境变量传给下载进程，不落盘。
+    if let Some(token) = hf_token {
+        if !token.trim().is_empty() {
+            command.env("HF_TOKEN", token.trim());
+        }
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|e| e.to_string())?;
+
+    let handle = app.clone();
+    let stdout = child.stdout.take().expect("stdout");
+    let out_thread = std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().map_while(Result::ok) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                if value.get("event").is_some() {
+                    emit_event(&handle, "model-progress", value.clone());
+                    continue;
+                }
+            }
+            emit_event(&handle, "model-progress-line", serde_json::json!({ "text": line }));
+        }
+    });
+    let handle2 = app.clone();
+    let stderr = child.stderr.take().expect("stderr");
+    let err_thread = std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            emit_event(&handle2, "model-progress-line", serde_json::json!({ "text": line }));
+        }
+    });
+
+    {
+        let mut downloading = state.downloading.lock();
+        *downloading = Some(child);
+    }
+    let app_wait = app.clone();
+    let code = tauri::async_runtime::spawn_blocking(move || {
+        // 非阻塞轮询等待：不持有锁，取消命令可随时取走 child 并 kill。
+        let engine = app_wait.state::<EngineState>();
+        loop {
+            let mut guard = engine.downloading.lock();
+            let Some(child) = guard.as_mut() else {
+                // child 被取消命令取走并终止。
+                return -1;
+            };
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    *guard = None;
+                    return status.code().unwrap_or(-1);
+                }
+                Ok(None) => {
+                    drop(guard);
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                Err(_) => {
+                    *guard = None;
+                    return -1;
+                }
+            }
+        }
     })
     .await
     .map_err(|e| e.to_string())?;
-    let code = result.map_err(|e| e.to_string())?;
+
+    let _ = out_thread.join();
+    let _ = err_thread.join();
+    let cancelled = code == -1;
     emit_event(
         &app,
         "model-done",
-        serde_json::json!({ "success": code == 0, "modelId": model_id, "alias": alias_out }),
+        serde_json::json!({ "success": code == 0, "cancelled": cancelled, "modelId": model_id, "alias": alias_out }),
     );
-    if code != 0 {
+    if code != 0 && !cancelled {
         return Err("模型下载失败，请查看日志".into());
+    }
+    Ok(())
+}
+
+/// 取消进行中的模型下载（终止下载子进程）。
+#[tauri::command]
+pub async fn cancel_download(state: State<'_, EngineState>) -> Result<(), String> {
+    let mut downloading = state.downloading.lock();
+    if let Some(mut child) = downloading.take() {
+        let _ = child.kill();
+        let _ = child.wait();
     }
     Ok(())
 }

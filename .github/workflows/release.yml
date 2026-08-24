@@ -37,6 +37,23 @@ jobs:
       - name: Build bundle resources (engine/airllm wheels + uv.exe + catalog)
         run: python tools/build_bundle.py
 
+      - name: Sync product version with git tag
+        working-directory: desktop/src-tauri
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python -c "
+          import json, os
+          tag = os.environ['REF_NAME'].lstrip('v')
+          with open('tauri.conf.json', encoding='utf-8') as f:
+              cfg = json.load(f)
+          cfg['version'] = tag
+          with open('tauri.conf.json', 'w', encoding='utf-8') as f:
+              json.dump(cfg, f, ensure_ascii=False, indent=2)
+              f.write('
+')
+          "
+
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci

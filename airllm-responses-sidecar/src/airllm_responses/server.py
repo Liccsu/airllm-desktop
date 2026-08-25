@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .config import ConfigError, Settings, load_approved_manifest, load_settings
@@ -211,6 +212,16 @@ def create_app(runtime: TextBackend | ModelRuntime | None = None, settings: Sett
     resolved_settings = _settings_for_app(settings)
     slot = _RuntimeSlot(runtime, resolved_settings)
     application = FastAPI(title="AirLLM Responses Sidecar")
+
+    # 桌面端 WebView 与本地服务跨源（dev 为 http://127.0.0.1:1420，打包后为 tauri://localhost），
+    # 必须放行 CORS，否则前端 fetch 会被拦截并报 Failed to fetch。
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     if resolved_settings is not None and resolved_settings.preload and runtime is None:
         try:

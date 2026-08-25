@@ -152,6 +152,25 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
+    # 设备自动降级：配置为 cuda 但当前环境 CUDA 不可用时，回退到 cpu 并提示。
+    if config.engine.device.startswith("cuda"):
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                config = AppConfig(
+                    data_dir=config.data_dir,
+                    server=config.server,
+                    model=config.model,
+                    engine=_replace(config.engine, device="cpu"),
+                )
+                emit(
+                    "serve.warning",
+                    message="未检测到可用 CUDA，已自动使用 CPU 推理（速度较慢）",
+                )
+        except ImportError:
+            pass
+
     settings = to_settings(config, api_key)
 
     # 保证服务超时校验到模型清单；无效路径直接失败优于启动一个永远 503 的进程。
@@ -353,6 +372,13 @@ _COMMANDS = {
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # 管道输出（桌面端接管 stdout/stderr）时 Windows 默认 cp1252 会因中文崩溃，
+    # 统一强制 UTF-8 并用替换符兜底。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

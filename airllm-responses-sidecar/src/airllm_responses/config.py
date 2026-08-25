@@ -66,6 +66,9 @@ class ApprovedManifest:
     revision: str
     model_dir: Path
     approved: bool = True
+    # 是否由应用管理模型目录（下载或链接）。False 表示模型目录为外部位置，
+    # 删除别名时只移除清单与分片，不触碰模型目录。
+    managed: bool = True
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -74,6 +77,7 @@ class ApprovedManifest:
             "revision": self.revision,
             "model_dir": str(self.model_dir),
             "approved": self.approved,
+            "managed": self.managed,
         }
 
 
@@ -89,9 +93,12 @@ def load_approved_manifest(path: str | os.PathLike[str] | Path) -> ApprovedManif
         raise ManifestError(f"无法读取模型清单: {manifest_path}") from exc
     if not isinstance(payload, dict):
         raise ManifestError("模型清单必须是 JSON 对象")
+    allowed = {"source", "model_id", "revision", "model_dir", "approved", "managed"}
+    if not set(payload).issubset(allowed):
+        raise ManifestError("模型清单字段无效")
     required = {"source", "model_id", "revision", "model_dir", "approved"}
-    if set(payload) != required:
-        raise ManifestError("模型清单字段必须恰好为 source、model_id、revision、model_dir、approved")
+    if not required.issubset(set(payload)):
+        raise ManifestError("模型清单缺少必需字段")
     if payload["source"] not in {"huggingface", "modelscope", "local"} or payload["approved"] is not True:
         raise ManifestError("模型清单来源未知或未获批准")
     for field in ("model_id", "revision", "model_dir"):
@@ -105,6 +112,7 @@ def load_approved_manifest(path: str | os.PathLike[str] | Path) -> ApprovedManif
         model_id=payload["model_id"],
         revision=payload["revision"],
         model_dir=model_dir,
+        managed=payload.get("managed", True) is True,
     )
 
 

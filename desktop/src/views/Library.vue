@@ -35,6 +35,12 @@ const installedByModelId = computed(() => {
   return map;
 });
 
+// 已安装但不在内置目录中的模型（自定义下载/本地导入），单独展示。
+const customInstalled = computed(() => {
+  const catalogIds = new Set((store.snapshot?.catalog ?? []).map((m) => m.id));
+  return (store.snapshot?.installed ?? []).filter((m) => !catalogIds.has(m.modelId));
+});
+
 const activeModel = computed(() => store.snapshot?.service.model ?? "");
 
 async function refresh() {
@@ -184,6 +190,31 @@ async function importLocal() {
       </div>
     </div>
 
+    <div v-if="customInstalled.length" class="custom-models">
+      <div class="section-title">已导入 / 自定义模型</div>
+      <div class="grid">
+        <div v-for="mod in customInstalled" :key="mod.alias" class="card model-card">
+          <div class="m-head">
+            <strong>{{ mod.modelId.startsWith("local:") ? mod.modelId.slice(6) : mod.modelId }}</strong>
+          </div>
+          <div class="m-desc">{{ mod.modelDir }}</div>
+          <div class="m-meta">
+            <span class="pill">{{ mod.modelId.startsWith("local:") ? "本地导入" : "HuggingFace" }}</span>
+          </div>
+          <div class="m-actions">
+            <button
+              class="btn small primary"
+              :disabled="store.serviceBusy"
+              @click="start(mod.alias)"
+            >
+              {{ activeModel === mod.alias ? "运行中" : "启动" }}
+            </button>
+            <button class="btn small ghost" @click="remove(mod.alias)">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="custom card">
       <div class="section-title">自定义模型</div>
       <p class="custom-hint">输入任意 huggingface 模型 id（如 Qwen/Qwen3-4B），将与目录内模型一样下载安装。</p>
@@ -291,6 +322,12 @@ async function importLocal() {
   display: flex;
   gap: 8px;
   margin-top: 6px;
+}
+.custom-models {
+  margin-top: 26px;
+}
+.custom-models .grid {
+  margin-top: 10px;
 }
 .custom {
   margin-top: 26px;

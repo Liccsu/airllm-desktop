@@ -216,7 +216,14 @@ def create_app(runtime: TextBackend | ModelRuntime | None = None, settings: Sett
         try:
             slot.ensure_runtime()
         except _NotReadyError:
-            pass
+            # 预加载失败原因输出到 stdout（桌面端会作为服务日志展示），
+            # 避免界面永远停留在“启动中”而没有任何提示。
+            import sys as _sys
+            print(
+                "[serve] 模型预加载失败：模型未就绪，请检查模型目录、设备(CUDA)与依赖是否可用",
+                file=_sys.stderr,
+                flush=True,
+            )
 
     @application.get("/healthz")
     async def healthz() -> JSONResponse:

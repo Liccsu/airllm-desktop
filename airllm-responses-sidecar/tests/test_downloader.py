@@ -132,5 +132,27 @@ class DownloaderTests(unittest.TestCase):
             self.assertEqual(validate_snapshot(root), root)
 
 
+    def test_install_same_location_registers_without_link(self) -> None:
+        """模型已在模型下载目录的正确位置时直接注册，删除不触碰外部目录。"""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            model_root = data_dir / "external"
+            source = model_root / "demo"
+            self._snapshot(source)
+
+            result = install_from_local(source, "demo", data_dir, model_root=model_root)
+            self.assertTrue(result.model_dir.is_dir())
+            # 未创建链接：目录仍为普通目录且内容直接可见。
+            self.assertFalse(os.path.islink(result.model_dir))
+            self.assertTrue((result.model_dir / "config.json").is_file())
+
+            # 删除别名：不删除外部模型目录，仅移除清单。
+            remove_model_alias("demo", data_dir, model_root=model_root)
+            self.assertTrue(source.is_dir())
+            self.assertTrue((source / "config.json").is_file())
+            self.assertEqual(list(data_dir.joinpath("manifests").glob("demo.json")), [])
+
+
 if __name__ == "__main__":
     unittest.main()

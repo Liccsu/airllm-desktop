@@ -80,6 +80,7 @@ def write_approved_manifest(
     revision: str,
     model_dir: str | os.PathLike[str] | Path,
     source: str = "huggingface",
+    managed: bool = True,
 ) -> Path:
     """原子写入不含 token 的审核记录。"""
 
@@ -95,6 +96,7 @@ def write_approved_manifest(
         revision=revision,
         model_dir=model_path,
         approved=True,
+        managed=managed,
     ).as_dict()
     temporary = manifest_path.with_name(f".{manifest_path.name}.tmp")
     try:

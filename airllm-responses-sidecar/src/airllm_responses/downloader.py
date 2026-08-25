@@ -154,12 +154,6 @@ def _download_with_progress(
             max_workers=workers,
         )
     except Exception as exc:
-        # 受限仓库：需要有效的 HF Access Token，并先在 HF 官网申请访问权限。
-        if type(exc).__name__ == "GatedRepoError" or "gated repo" in str(exc).lower():
-            raise DownloadError(
-                "该模型是 Hugging Face 受限仓库（gated）：请在 HF 官网申请访问权限，"
-                "然后在设置页填写 Hugging Face Access Token 后重试"
-            ) from exc
         raise DownloadError(f"模型下载失败: {type(exc).__name__}") from exc
 
 
@@ -255,6 +249,35 @@ def download_catalog_model(
         validate_snapshot(staging)
         staging.replace(final_dir)
     except Exception as exc:
+        # 镜像源不支持受限仓库（403/503）时，自动降级到官方源重试一次。
+        if endpoint is not None and endpoint.strip() not in ("", "https://huggingface.co"):
+            lowered = str(exc).lower()
+            if "403" in lowered or "503" in lowered or "gated" in lowered or "forbidden" in lowered:
+                shutil.rmtree(staging, ignore_errors=True)
+                emit(
+                    "download.warning",
+                    message="镜像源不支持该模型（受限仓库或鉴权失败），自动切换官方源重试",
+                    model_id=model_id,
+                    alias=alias,
+                )
+                try:
+                    result = download_catalog_model(
+                        model_id=model_id,
+                        alias=alias,
+                        data_dir=data_dir,
+                        token=token,
+                        catalog=catalog,
+                        revision=revision,
+                        endpoint=None,  # 官方源
+                        model_root=model_root,
+                        workers=workers,
+                        progress=progress,
+                    )
+                    return result
+                except DownloadError as retry_exc:
+                    raise DownloadError(
+                        f"镜像源与官方源均下载失败：{retry_exc}"
+                    ) from exc
         # 兜底：hub 收尾/校验失败（如断流、镜像 401）但快照文件与清单大小一致时，
         # 视为下载成功继续发布，让用户对网络抖动镜像更鲁棒。
         snap_ok = False
@@ -335,19 +358,30 @@ def install_from_local(
     except ProvisionError as exc:
         raise DownloadError(f"源目录不是完整的模型 snapshot: {exc}") from exc
     final_dir = (model_root if model_root is not None else data_dir / "models") / alias
-    if final_dir.exists():
-        raise DownloadError(f"模型目录已存在: {final_dir}")
-    final_dir.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        _link_directory(source, final_dir)
-    except Exception as exc:
-        raise DownloadError("创建模型目录链接失败") from exc
-    # 校验链接后的读取路径，写失败时断开链接。
-    try:
-        validate_snapshot(final_dir)
-    except Exception as exc:
-        _unlink_directory(final_dir)
-        raise DownloadError("链接后的模型 snapshot 无效") from exc
+    # 在创建链接前判断路径是否相同（junction 创建后 resolve 会跟随链接，不能再用于比较）。
+    same_location = os.path.normcase(os.path.abspath(final_dir)) == os.path.normcase(os.path.abspath(source))
+    if same_location:
+        # 模型已在模型下载目录的正确位置：无需创建链接，直接注册。
+        emit(
+            "download.warning",
+            message="模型已在模型下载目录中，直接注册",
+            alias=alias,
+        )
+    else:
+        if final_dir.exists():
+            raise DownloadError(f"模型目录已存在: {final_dir}")
+        final_dir.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            _link_directory(source, final_dir)
+        except Exception as exc:
+            raise DownloadError("创建模型目录链接失败") from exc
+        # 校验链接后的读取路径，写失败时断开链接。
+        try:
+            validate_snapshot(final_dir)
+        except Exception as exc:
+            _unlink_directory(final_dir)
+            raise DownloadError("链接后的模型 snapshot 无效") from exc
+    managed = not same_location
     manifest_path = data_dir / "manifests" / f"{alias}.json"
     write_approved_manifest(
         manifest=manifest_path,
@@ -355,6 +389,7 @@ def install_from_local(
         revision="local",
         model_dir=final_dir,
         source="local",
+        managed=managed,
     )
     emit("download.done", model_id=f"local:{source}", alias=alias, model_dir=str(final_dir), manifest=str(manifest_path))
     return DownloadResult(final_dir, manifest_path, "local", source="local")
@@ -372,14 +407,26 @@ def _unlink_directory(path: Path) -> None:
 
 
 def remove_model_alias(alias: str, data_dir: Path, model_root: Path | None = None) -> None:
-    """删除模型别名：断开链接（local 源）或删除数据目录，并移除清单与分片。"""
+    """删除模型别名：断开链接（local 源）或删除数据目录，并移除清单与分片。
 
+    模型目录由应用管理（下载/链接）时删除；外部目录（managed=False）只删清单与分片。
+    """
+
+    import json as _json
+
+    manifest_path = data_dir / "manifests" / f"{alias}.json"
+    managed = True
+    try:
+        payload = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        managed = payload.get("managed", True) is True
+    except Exception:
+        pass
     model_dir = (model_root if model_root is not None else data_dir / "models") / alias
-    if model_dir.exists():
+    if managed and model_dir.exists():
         _unlink_directory(model_dir)
     for path in (
         data_dir / "shards" / alias,
-        data_dir / "manifests" / f"{alias}.json",
+        manifest_path,
     ):
         if path.is_dir():
             shutil.rmtree(path, ignore_errors=True)

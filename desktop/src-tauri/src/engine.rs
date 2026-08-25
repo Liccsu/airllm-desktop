@@ -724,6 +724,7 @@ pub async fn download_model(
     hide_console(&mut command);
     command.args(&args);
     // HF Access Token 仅通过环境变量传给下载进程，不落盘。
+    // 仅当前端显式提供时传递；前端未填则完全不传。
     if let Some(token) = hf_token {
         if !token.trim().is_empty() {
             command.env("HF_TOKEN", token.trim());
@@ -853,7 +854,7 @@ pub async fn remove_model(
 
 #[tauri::command]
 pub async fn import_model(
-    app: AppHandle,
+    _app: AppHandle,
     state: State<'_, EngineState>,
     dir: String,
     alias: String,
@@ -877,15 +878,33 @@ pub async fn import_model(
             args.push(settings.model_root.clone());
         }
     }
-    let app_clone = app.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        run_engine_cli(&app_clone, &python, &args, "model-progress")
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    let code = result.map_err(|e| e.to_string())?;
-    if code != 0 {
-        return Err("导入模型失败（请确认目录包含 config.json 与权重文件）".into());
+    // 直接收集 stderr 尾部，失败时透传引擎的真实错误信息。
+    let mut command = Command::new(&python);
+    hide_console(&mut command);
+    command.args(&args);
+    command.env("PYTHONIOENCODING", "utf-8");
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let stderr = child.stderr.take().expect("stderr");
+    let last_error = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let last_error2 = last_error.clone();
+    let err_thread = std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            let trimmed = line.trim().to_string();
+            if !trimmed.is_empty() {
+                *last_error2.lock().unwrap() = trimmed;
+            }
+        }
+    });
+    let status = child.wait().map_err(|e| e.to_string())?;
+    let _ = err_thread.join();
+    if !status.success() {
+        let detail = last_error.lock().unwrap().clone();
+        if !detail.is_empty() {
+            return Err(detail);
+        }
+        return Err("导入模型失败".into());
     }
     Ok(())
 }
@@ -906,15 +925,23 @@ pub async fn start_service(
         let mut guard = state.settings.lock();
         *guard = settings.clone();
     }
-    let config_path = write_app_toml(&state, &alias, &settings)?;
+    // 模型目录取自清单中的真实位置（可能与模型下载目录不同，例如导入的外部模型）。
+    let installed = list_installed(&state.data_dir);
+    let model_entry = installed.iter().find(|m| m.alias == alias).ok_or_else(|| {
+        format!("模型 {alias} 尚未安装")
+    })?;
+    let model_dir = PathBuf::from(&model_entry.model_dir);
+    let config_path = write_app_toml(&state, &alias, &settings, &model_dir)?;
     let api_key = load_or_create_api_key(&state);
 
     let mut command = Command::new(&python);
     hide_console(&mut command);
     command
-        .args(["-m", "airllm_responses.cli", "serve", "--config"])
+        // -u：无缓冲输出，服务日志（模型加载进度等）实时转发到界面。
+        .args(["-u", "-m", "airllm_responses.cli", "serve", "--config"])
         .arg(&config_path)
         .env("AIRLLM_API_KEY", &api_key)
+        .env("PYTHONIOENCODING", "utf-8")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut record = ServiceRecord { child: command.spawn().map_err(|e| e.to_string())? };
@@ -995,14 +1022,14 @@ fn persist_settings(state: &EngineState) -> Result<(), String> {
     std::fs::write(&path, json).map_err(|e| e.to_string())
 }
 
-fn write_app_toml(state: &EngineState, alias: &str, settings: &ServiceSettings) -> Result<PathBuf, String> {
+fn write_app_toml(
+    state: &EngineState,
+    alias: &str,
+    settings: &ServiceSettings,
+    model_dir: &Path,
+) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&state.data_dir).map_err(|e| e.to_string())?;
     let win_path = |path: PathBuf| path.to_string_lossy().replace('\\', "/");
-    let model_base = if settings.model_root.is_empty() {
-        state.data_dir.join("models")
-    } else {
-        PathBuf::from(&settings.model_root)
-    };
     let toml = format!(
         "[server]\nhost = \"127.0.0.1\"\nport = {port}\nmax_concurrent_requests = 1\npreload = {preload}\napi_key_file = \"{api_key_file}\"\n\n[model]\nname = \"{alias}\"\nendpoint = \"{endpoint}\"\nroot = \"{model_root}\"\ndir = \"{model_dir}\"\nshard_dir = \"{shard_dir}\"\nmanifest = \"{manifest}\"\n\n[engine]\ndevice = \"{device}\"\nmax_seq_len = {max_seq_len}\nmax_output_tokens = {max_output_tokens}\ndownload_workers = {download_workers}\n",
         port = settings.port,
@@ -1010,7 +1037,7 @@ fn write_app_toml(state: &EngineState, alias: &str, settings: &ServiceSettings) 
         endpoint = settings.endpoint,
         model_root = settings.model_root,
         api_key_file = win_path(state.api_key_path()),
-        model_dir = win_path(model_base.join(alias)),
+        model_dir = win_path(model_dir.to_path_buf()),
         shard_dir = win_path(state.data_dir.join("shards").join(alias)),
         manifest = win_path(state.data_dir.join("manifests").join(format!("{alias}.json"))),
         device = settings.device,

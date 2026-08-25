@@ -13,7 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .config import ConfigError, Settings, load_approved_manifest, load_settings
-from .model_runtime import AirLLMBackend, GenerationResult, ModelRuntime, StreamPiece, TextBackend
+from .model_runtime import (
+    AirLLMBackend,
+    DirectBackend,
+    GenerationResult,
+    ModelRuntime,
+    StreamPiece,
+    TextBackend,
+    choose_backend,
+)
 from .provision import ProvisionError, validate_snapshot
 from .protocol import (
     ProtocolError,
@@ -71,12 +79,15 @@ class _RuntimeSlot:
 
     def _load_production(self) -> ModelRuntime:
         manifest = self._validated_manifest()
-        backend = AirLLMBackend(
+        # 模型能完整放进显存时全量加载（远快于逐层流式），否则退回 AirLLM 流式。
+        backend = choose_backend(
             model_dir=str(manifest.model_dir),
             device=self.settings.device,
             shard_dir=str(self.settings.shard_dir),
             max_seq_len=self.settings.max_seq_len,
         )
+        mode = "全量加载（GPU）" if isinstance(backend, DirectBackend) else "逐层流式加载（AirLLM）"
+        print(f"[serve] 模型加载模式: {mode}", flush=True)
         return ModelRuntime(backend)
 
     def ensure_runtime(self) -> ModelRuntime:

@@ -106,7 +106,9 @@ async function stopService() {
         >停止服务</button>
       </header>
       <div class="view">
-        <component :is="current" />
+        <KeepAlive>
+          <component :is="current" />
+        </KeepAlive>
       </div>
     </main>
   </div>

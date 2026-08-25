@@ -9,6 +9,10 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   streaming?: boolean;
+  /** 消息发送/创建时间戳（毫秒） */
+  ts: number;
+  /** 回复生成耗时（毫秒，assistant 消息完成时设置） */
+  elapsedMs?: number;
 }
 
 let nextId = 1;
@@ -25,6 +29,18 @@ const modelName = computed(
 const canSend = computed(
   () => modelName.value !== "" && !sending.value && service.value?.ready !== false,
 );
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatElapsed(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  return `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -58,7 +74,7 @@ async function scrollToBottom() {
 }
 
 function addMessage(role: Message["role"], content: string): Message {
-  const message: Message = { id: nextId++, role, content };
+  const message: Message = { id: nextId++, role, content, ts: Date.now() };
   messages.value.push(message);
   void scrollToBottom();
   return message;
@@ -73,6 +89,7 @@ async function send() {
   const assistant = addMessage("assistant", "");
   assistant.streaming = true;
   sending.value = true;
+  const startedAt = Date.now();
 
   const controller = new AbortController();
   abortController = controller;
@@ -143,6 +160,8 @@ async function send() {
     sending.value = false;
     if (!assistant.content) {
       messages.value = messages.value.filter((m) => m.id !== assistant.id);
+    } else {
+      assistant.elapsedMs = Date.now() - startedAt;
     }
     await refreshState();
   }
@@ -196,6 +215,10 @@ async function usePrompt(p: string) {
           <div v-else-if="message.content" class="plain">{{ message.content }}</div>
           <div v-else class="typing" :class="{ active: message.streaming }">
             <span></span><span></span><span></span>
+          </div>
+          <div v-if="message.content" class="msg-meta">
+            <span>{{ formatTime(message.ts) }}</span>
+            <span v-if="message.elapsedMs != null">耗时 {{ formatElapsed(message.elapsedMs) }}</span>
           </div>
         </div>
       </div>
@@ -271,6 +294,16 @@ async function usePrompt(p: string) {
 .msg.user {
   align-self: flex-end;
   flex-direction: row-reverse;
+}
+.msg-meta {
+  margin-top: 6px;
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted, #8a93a6);
+}
+.msg.user .msg-meta {
+  justify-content: flex-end;
 }
 .avatar {
   width: 34px;

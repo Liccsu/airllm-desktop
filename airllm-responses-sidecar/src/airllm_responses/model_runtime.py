@@ -400,30 +400,53 @@ def _apply_layer_window(model: object, window: int) -> None:
 
     model._airllm_resident = {}
     model._airllm_window = max(1, window)
+    model._airllm_fallback = False
 
     def window_pre(module: object, args: object) -> None:
         idx = module._airllm_idx  # type: ignore[attr-defined]
         resident = model._airllm_resident  # type: ignore[attr-defined]
+        if getattr(model, "_airllm_fallback", False):
+            # 降级模式：单层加载、用后即释放（airllm 原行为）。
+            state_dict = model._load_streamed_layer(idx)  # type: ignore[attr-defined]
+            module._airllm_moved = model.move_layer_to_device(state_dict)  # type: ignore[attr-defined]
+            return
         if idx in resident:
             return
-        # 释放窗口滑过的层。
-        for i in list(resident):
-            if i < idx:
-                for param_name in resident[i]:
-                    set_module_tensor_to_device(model.model, param_name, "meta")  # type: ignore[attr-defined]
-                del resident[i]
-        # 批量加载 [idx, idx+W) 驻留。
-        end = min(idx + model._airllm_window, len(model.layers))  # type: ignore[attr-defined]
-        for i in range(idx, end):
-            if i in resident:
-                continue
-            state_dict = model._load_streamed_layer(i)  # type: ignore[attr-defined]
-            moved = model.move_layer_to_device(state_dict)  # type: ignore[attr-defined]
-            resident[i] = moved
-        clean_memory()
+        try:
+            # 释放窗口滑过的层。
+            for i in list(resident):
+                if i < idx:
+                    for param_name in resident[i]:
+                        set_module_tensor_to_device(model.model, param_name, "meta")  # type: ignore[attr-defined]
+                    del resident[i]
+            # 批量加载 [idx, idx+W) 驻留。
+            end = min(idx + model._airllm_window, len(model.layers))  # type: ignore[attr-defined]
+            for i in range(idx, end):
+                if i in resident:
+                    continue
+                state_dict = model._load_streamed_layer(i)  # type: ignore[attr-defined]
+                moved = model.move_layer_to_device(state_dict)  # type: ignore[attr-defined]
+                resident[i] = moved
+            clean_memory()
+        except Exception:
+            # 窗口加载失败（显存不足等）时逐层降级，不让整个推理崩溃。
+            model._airllm_fallback = True
+            model._airllm_resident.clear()
+            state_dict = model._load_streamed_layer(idx)  # type: ignore[attr-defined]
+            module._airllm_moved = model.move_layer_to_device(state_dict)  # type: ignore[attr-defined]
+            print(
+                "[serve] 层驻留窗口失效，已回退逐层加载模式",
+                flush=True,
+            )
 
     def window_post(module: object, args: object, output: object) -> object:
-        # 不释放：层在窗口滑过前保持驻留。
+        if getattr(model, "_airllm_fallback", False):
+            # 降级模式：本层用后即释放。
+            for param_name in getattr(module, "_airllm_moved", []):
+                set_module_tensor_to_device(model.model, param_name, "meta")  # type: ignore[attr-defined]
+            module._airllm_moved = []  # type: ignore[attr-defined]
+            clean_memory()
+        # 窗口模式：不释放，层在窗口滑过前保持驻留。
         return output
 
     for module in model.layers:  # type: ignore[attr-defined]

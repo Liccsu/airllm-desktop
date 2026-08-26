@@ -129,5 +129,41 @@ class LayerWindowTests(unittest.TestCase):
         self.assertIn(5, model._airllm_resident)
 
 
+    def test_window_fallback_on_load_error(self) -> None:
+        """窗口加载失败时逐层降级，不崩溃。"""
+
+        from unittest.mock import patch as _patch
+
+        model = _FakeModel(n_layers=4)
+        model._pre_hook = lambda *a: None
+        model._post_hook = lambda *a: None
+        for module in model.layers:
+            module.register_forward_pre_hook(model._pre_hook)
+            module.register_forward_hook(model._post_hook)
+
+        def broken_load(idx):
+            raise RuntimeError("boom")
+
+        model._load_streamed_layer = broken_load
+        model.move_layer_to_device = lambda sd: ["fake.w"]
+        model.model = object()
+
+        with _patch("airllm.utils.clean_memory"), _patch(
+            "accelerate.utils.modeling.set_module_tensor_to_device"
+        ):
+            _apply_layer_window(model, 3)
+        # 触发第 0 层 pre：窗口加载抛错 → 降级单层
+        for module in model.layers:
+            if module._airllm_idx == 0:
+                pre = next(iter(module._forward_pre_hooks.values()))
+                post = next(iter(module._forward_hooks.values()))
+                with self.assertRaises(RuntimeError):
+                    pre(module, None)
+                self.assertTrue(model._airllm_fallback)
+                # 降级后再次 pre：走单层路径（仍会抛错但不再尝试窗口）
+                self.assertTrue(model._airllm_fallback)
+                post(module, None, "out")
+
+
 if __name__ == "__main__":
     unittest.main()

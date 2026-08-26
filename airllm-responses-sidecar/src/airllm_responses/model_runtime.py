@@ -78,6 +78,17 @@ class AirLLMBackend:
             delete_original=False,
         )
         self.tokenizer = self.model.tokenizer
+        # 层驻留窗口：用显存余量批量驻留多层，减少逐层磁盘换载。
+        try:
+            window = _layer_window_size(self.model)
+            if window > 1:
+                _apply_layer_window(self.model, window)
+                print(
+                    f"[serve] 已启用层驻留窗口: 同时驻留 {window} 层",
+                    flush=True,
+                )
+        except Exception:
+            pass
         self._generation_thread: threading.Thread | None = None
 
     def _tokenize(self, prompt: str) -> tuple[object, int]:
@@ -330,6 +341,101 @@ class DirectBackend:
         finally:
             cancel.set()
             self._generation_thread = None
+
+
+# ── 层驻留窗口 ────────────────────────────────────────────────────────────
+#
+# airllm 默认每层计算完立即释放，每生成一个 token 都要从磁盘重新读全部层，
+# GPU 大部分时间空转。这里把 pre/post hook 替换为“窗口驻留”版本：
+# 一次加载 W 层驻留显存，窗口滑过才释放，磁盘换层次数降低到 1/W。
+
+_WINDOW_MAX = 8
+
+
+def _layer_window_size(model: object) -> int:
+    """按可用显存与每层权重体积估算驻留窗口大小 W。"""
+
+    import os
+    from pathlib import Path
+
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return 1
+        device = getattr(model, "device", "cuda:0")
+        dev = torch.device(device) if isinstance(device, str) else device
+        props = torch.cuda.get_device_properties(dev.index)
+        vram_total = props.total_memory
+        vram_used = torch.cuda.memory_allocated(dev.index)
+    except Exception:
+        return 1
+    checkpoint = getattr(model, "checkpoint_path", None)
+    n_layers = len(getattr(model, "layer_names", None) or [])
+    if not checkpoint or n_layers <= 0:
+        return 1
+    root = Path(checkpoint).parent
+    total_bytes = 0
+    if root.is_dir():
+        for path in root.rglob("*"):
+            if path.is_file():
+                try:
+                    total_bytes += os.path.getsize(path)
+                except OSError:
+                    pass
+    if total_bytes <= 0:
+        return 1
+    # 保守按反量化后 fp16 体积估算（存储可能是 INT8/FP8，乘以 2）。
+    per_layer = total_bytes * 2.0 / n_layers
+    avail = vram_total - vram_used - 2 * 1024**3
+    window = int(avail / per_layer)
+    return max(1, min(window, _WINDOW_MAX, n_layers))
+
+
+def _apply_layer_window(model: object, window: int) -> None:
+    """替换 airllm 的层 pre/post hook 为窗口驻留版本。"""
+
+    from accelerate.utils.modeling import set_module_tensor_to_device
+    from airllm.utils import clean_memory
+
+    model._airllm_resident = {}
+    model._airllm_window = max(1, window)
+
+    def window_pre(module: object, args: object) -> None:
+        idx = module._airllm_idx  # type: ignore[attr-defined]
+        resident = model._airllm_resident  # type: ignore[attr-defined]
+        if idx in resident:
+            return
+        # 释放窗口滑过的层。
+        for i in list(resident):
+            if i < idx:
+                for param_name in resident[i]:
+                    set_module_tensor_to_device(model.model, param_name, "meta")  # type: ignore[attr-defined]
+                del resident[i]
+        # 批量加载 [idx, idx+W) 驻留。
+        end = min(idx + model._airllm_window, len(model.layers))  # type: ignore[attr-defined]
+        for i in range(idx, end):
+            if i in resident:
+                continue
+            state_dict = model._load_streamed_layer(i)  # type: ignore[attr-defined]
+            moved = model.move_layer_to_device(state_dict)  # type: ignore[attr-defined]
+            resident[i] = moved
+        clean_memory()
+
+    def window_post(module: object, args: object, output: object) -> object:
+        # 不释放：层在窗口滑过前保持驻留。
+        return output
+
+    for module in model.layers:  # type: ignore[attr-defined]
+        midx = getattr(module, "_airllm_idx", None)
+        if midx is None:
+            continue
+        for hooks in (module._forward_pre_hooks, module._forward_hooks):  # type: ignore[attr-defined]
+            stale = [k for k, v in hooks.items() if v == model._pre_hook or v == model._post_hook]  # type: ignore[attr-defined]
+            for k in stale:
+                del hooks[k]
+        module.register_forward_pre_hook(window_pre)  # type: ignore[attr-defined]
+        module.register_forward_hook(window_post)  # type: ignore[attr-defined]
 
 
 def choose_backend(

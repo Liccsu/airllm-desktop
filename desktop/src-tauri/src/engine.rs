@@ -20,6 +20,7 @@ const BASE_DEPENDENCIES: &[&str] = &[
     "transformers>=4.49,<5.13",
     "accelerate>=1.0",
     "safetensors",
+    "compressed-tensors",
     "huggingface-hub",
     "scipy",
     "sentencepiece",

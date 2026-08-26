@@ -55,6 +55,14 @@ class AirLLMBackend:
         max_seq_len: int,
     ) -> None:
         from airllm import AutoModel
+        from airllm import auto_model as _airllm_auto
+
+        # airllm 未收录 Qwen3.5 MoE 架构，会退回 generic 类；其权重为
+        # model.language_model.layers.N 结构，generic 的 model.layers 前缀
+        # 会错误匹配导致拆分崩溃。复用 Qwen3.5 专用类的正确层名映射。
+        _airllm_auto.ARCH_OVERRIDES.setdefault(
+            "Qwen3_5MoeForConditionalGeneration", "AirLLMQwen3_5"
+        )
 
         self.model = AutoModel.from_pretrained(
             model_dir,

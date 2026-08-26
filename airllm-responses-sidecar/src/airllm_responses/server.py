@@ -54,6 +54,10 @@ class _RuntimeSlot:
     def ready(self) -> bool:
         return self._runtime is not None
 
+    @property
+    def load_error(self) -> Exception | None:
+        return self._load_error
+
     def _validated_manifest(self):
         if self.settings is None:
             raise _NotReadyError("服务配置不可用")
@@ -238,14 +242,20 @@ def create_app(runtime: TextBackend | ModelRuntime | None = None, settings: Sett
         try:
             slot.ensure_runtime()
         except _NotReadyError:
-            # 预加载失败原因输出到 stdout（桌面端会作为服务日志展示），
-            # 避免界面永远停留在“启动中”而没有任何提示。
+            # 预加载失败原因输出到 stderr（桌面端会作为服务日志展示），
+            # 带出底层异常详情，便于定位是目录、依赖还是架构兼容问题。
             import sys as _sys
+            import traceback as _traceback
+            detail = slot.load_error
             print(
                 "[serve] 模型预加载失败：模型未就绪，请检查模型目录、设备(CUDA)与依赖是否可用",
                 file=_sys.stderr,
                 flush=True,
             )
+            if detail is not None:
+                _traceback.print_exception(type(detail), detail, detail.__traceback__, file=_sys.stderr)
+            else:
+                print("[serve]（无底层异常详情）", file=_sys.stderr, flush=True)
 
     @application.get("/healthz")
     async def healthz() -> JSONResponse:
